@@ -5,10 +5,9 @@ Puppet module for managing Percona XtraDB.
 
 Included Vagrantfile will provision cluster of 3 Nodes on Centos7 boxes:
 
-vagrant up galera1
-vagrant up
+vagrant up galera1 && vagrant up
 
- - the 'master' node will do the bootstraping, so 1 node in cluster shoud have:
+ - the 'master' node (galera1) will do the bootstraping, so 1 node in cluster shoud have:
  'master => true' for bootsrapping. Set master => false after bootstrap is done.
  - sample configs are located in examples/
  - 'xinetd' module should be also applied to all Galera nodes (for monitoring).
@@ -86,5 +85,5 @@ For local usage with puppet apply see Vagrantfile.
 
 ##IMPORTANT:
 
-Don't forget that state transfer within Cluster is not encrypted by default.
+Don't forget that state transfer within Cluster is not encrypted by default!
 Donor node is recommended to be used for Backups and not the "Live" connections.
