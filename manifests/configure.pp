@@ -1,0 +1,78 @@
+include stdlib
+
+# == Class: percona::configure
+#
+# Configure percona and mysql cnf file
+#
+class percona::configure inherits percona {
+
+    $wsrep_provider_options = "gmcast.listen_addr=tcp://0.0.0.0:4010; ist.recv_addr=${percona::ist_recv_addr}; evs.keepalive_period = PT3S; evs.inactive_check_period = PT10S; evs.suspect_timeout = PT30S; evs.inactive_timeout = PT1M; evs.install_timeout = PT1M;"
+
+    file {$::percona::percona_conf:
+        content => template('percona/my.cnf.erb'),
+        #notify  => Service[$percona::percona_service]
+    }
+
+    file {'/root/.my.cnf':
+        content => template('percona/.my.cnf.erb'),
+    }
+    file {$::percona::datadir:
+        ensure => directory,
+        owner  => mysql,
+        group  => mysql,
+        #notify => Service[$percona::percona_service]
+    }
+    # SETUP FIREWALL from template add service if file cahnges and reload
+    file {'public.xml':
+        path    => '/etc/firewalld/zones/public.xml',
+        content => template('percona/public.erb'),
+        notify  => Exec['complete-reload']
+    }
+    file {'xtradb.xml':
+        path    => '/etc/firewalld/services/xtradb.xml',
+        content => template('percona/xtradb.erb'),
+        notify  => Exec['complete-reload']
+    }
+    exec {'complete-reload':
+      command     => 'firewall-cmd --complete-reload' ,
+      path        => ['/usr/bin'] ,
+      refreshonly => true
+    }
+
+    #APPLY SELINUX
+    exec {"selinux-install":
+      command     => "semodule -i percona_mysql.pp",
+      path        => ['/sbin', '/usr/sbin', '/bin', '/usr/bin'],
+      cwd         => "/etc/selinux/targeted/active/modules/100/mysql/",
+      subscribe   => File["percona_mysql.pp"],
+      refreshonly => true,
+    }
+
+    file {"percona_mysql.pp":
+      path   => "/etc/selinux/targeted/active/modules/100/mysql/percona_mysql.pp",
+      source => "puppet:///modules/percona/percona_mysql.pp",
+    }
+
+# START IF WE ARE NOT A MASTER, ELSE WE WILL START A BIT LATER in percona::master
+
+    if (!$percona::master) {
+      service { $percona::percona_service:
+        ensure     => running,
+        enable     => true,
+        hasrestart => true,
+        require    => [File[$percona::percona_conf],File[$percona::datadir],File['xtradb.xml'],File['public.xml']],
+      }
+    }
+
+    file {'/etc/services': ensure => present, }
+
+    file_line { 'mysqlchk':
+      path => '/etc/services',
+      line => 'mysqlchk 9200/tcp',
+    }
+
+    file {'/etc/xinetd.d/mysqlchk':
+      ensure => present,
+      source => "puppet:///modules/percona/mysqlchk"
+    }
+}
